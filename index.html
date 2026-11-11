@@ -565,7 +565,7 @@ function renderToday(){
   else{
     if(d)h+='<button class="pri wide" onclick="startSess()">开始复习</button>';
     else{var m=Math.min.apply(null,W.map(function(w){return w.nextReview})),n=Math.max(1,Math.ceil((m-Date.now())/DAY));h+='<div class="empty" style="padding:8px">今天到期的都复习完了。<br>下一批大约 '+n+' 天后出现。</div>'}
-    h+='<div class="prac"><button class="gho" onclick="startLoopAll()">循环复习</button><button class="gho" onclick="renderPick()">按日期选词</button></div>'}
+    h+='<div class="prac"><button class="gho" onclick="startLoopAll()">循环复习</button><button class="gho" onclick="openPick()">按日期选词</button></div>'}
   h+='</div>';
   var rows='';
   logLast().reverse().slice(0,40).forEach(function(x){var i=W.findIndex(function(y){return y.en===x.en});if(i<0)return;var w=W[i],isDue=w.nextReview<=Date.now();
@@ -574,13 +574,27 @@ function renderToday(){
   if(rows)h+='<div class="card"><div class="lab">今日记录（点“拉回”重新复习）</div>'+rows+'</div>';
   el.innerHTML=h}
 function pullIdx(i,dec){var w=W[i];if(!w)return;if(dec)w.level=Math.max(0,(w.level||0)-1);w.nextReview=0;w.fam=false;save();toast('已拉回复习');renderToday();if($('p-list').classList.contains('on'))renderList()}
-function renderPick(){var gs=groups();pkKeys=gs.map(function(g){return g.k});
-  var h='<h1>选择日期</h1><div class="sub">勾选要循环复习的批次，可多选</div><div class="card">';
-  gs.forEach(function(g,j){var n=g.ix.filter(function(i){return !W[i].fam}).length;
-    h+='<label class="row"><input type="checkbox" class="chk" id="pk'+j+'"><div class="m"><div class="w">'+esc(gname(g.k))+'</div><div class="d">'+g.ix.length+' 个词，其中 '+n+' 个还没完全熟悉</div></div></label>'});
-  $('p-today').innerHTML=h+'</div><button class="pri wide" onclick="startPick()">开始循环</button><button class="gho wide" style="margin-top:10px" onclick="renderToday()">返回</button>'}
-function startPick(){var a=[];pkKeys.forEach(function(k,j){if($('pk'+j).checked)a=a.concat(wordsOf(k))});a=a.filter(function(w){return !w.fam});if(!a.length)return toast('请先勾选有未熟悉单词的日期');startLoop(a)}
-function startLoopAll(){var a=W.filter(function(w){return !w.fam});if(!a.length)return toast('所有词都已完全熟悉');startLoop(a)}
+var pickSel={},pickOpen={};
+function wordsIdx(k){var a=[];W.forEach(function(w,i){if(gk(w)===k)a.push(i)});return a}
+function pkCount(){var n=0;for(var k in pickSel)if(pickSel[k])n++;return n}
+function openPick(){pickSel={};pickOpen={};renderPick()}
+function renderPick(){var gs=groups(),h='<h1>选择单词</h1><div class="sub">点日期展开，勾选要复习的词，已熟悉的也可以重新选</div><div style="display:flex;gap:8px;margin-bottom:12px"><button class="gho" style="flex:1;min-height:40px;font-size:14px" onclick="pkAll(true)">全选</button><button class="gho" style="flex:1;min-height:40px;font-size:14px" onclick="pkAll(false)">全不选</button></div>';
+  if(!gs.length)h+='<div class="empty">词库还是空的。</div>';
+  gs.forEach(function(g){var sel=g.ix.filter(function(i){return pickSel[i]}).length,op=pickOpen[g.k];
+    h+='<div class="card" style="padding:6px 16px"><div class="gh"><input type="checkbox" class="chk" id="pg-'+g.k+'" '+(sel===g.ix.length?'checked':'')+' onchange="pkGroup(\''+g.k+'\',this.checked)"><div class="t" onclick="pkOpenG(\''+g.k+'\')"><div class="w">'+esc(gname(g.k))+'</div><div class="d"><span id="pc-'+g.k+'">'+sel+'</span> / '+g.ix.length+' 已选</div></div><span class="chev" onclick="pkOpenG(\''+g.k+'\')">'+(op?'▾':'▸')+'</span></div>';
+    if(op)g.ix.forEach(function(i){var w=W[i],s2=st(w);h+='<label class="row st-'+s2+'"><input type="checkbox" class="chk" '+(pickSel[i]?'checked':'')+' onchange="pkWord('+i+',this.checked)"><div class="m"><div class="w">'+esc(w.en)+'</div><div class="d">'+esc(w.zh)+'</div></div><span class="pill p-'+s2+'">'+STN[s2]+'</span></label>'});
+    h+='</div>'});
+  $('p-today').innerHTML=h+'<button class="pri wide" id="pk-go" onclick="startPick()">开始循环（已选 '+pkCount()+' 个）</button><button class="gho wide" style="margin-top:10px" onclick="renderToday()">返回</button>'}
+function pkOpenG(k){pickOpen[k]=!pickOpen[k];renderPick()}
+function pkGroup(k,c){wordsIdx(k).forEach(function(i){pickSel[i]=c});renderPick()}
+function pkAll(c){W.forEach(function(w,i){pickSel[i]=c});renderPick()}
+function pkWord(i,c){pickSel[i]=c;
+  groups().forEach(function(g){var n=g.ix.filter(function(j){return pickSel[j]}).length,e=$('pc-'+g.k),b=$('pg-'+g.k);if(e)e.textContent=n;if(b)b.checked=(n===g.ix.length)});
+  $('pk-go').textContent='开始循环（已选 '+pkCount()+' 个）'}
+function startPick(){var a=[];W.forEach(function(w,i){if(pickSel[i])a.push(w)});if(!a.length)return toast('请先勾选要复习的单词');
+  a.forEach(function(w){if(w.fam){w.fam=false;w.level=Math.min(w.level||0,2);w.nextReview=Math.min(w.nextReview||0,dayStart(2))}});save();startLoop(a)}
+function pickGroup(k){tab('today');pickSel={};pickOpen={};wordsIdx(k).forEach(function(i){pickSel[i]=true});pickOpen[k]=true;renderPick()}
+function startLoopAll(){var a=W.filter(function(w){return !w.fam});if(!a.length)return toast('所有词都已完全熟悉，可用“按日期选词”重新复习');startLoop(a)}
 function startSess(){mode='due';hist=[];vq={};conf={};queue=shuf(due()).slice(0,CAP);sessWords=queue.slice();nextCard()}
 function startLoop(a){mode='loop';loopPool=a;hist=[];vq={};conf={};recent=[];shown={};loopN=0;sessWords=a.slice();nextCard()}
 function replay(){var a=sessWords.filter(function(w){return !w.fam});if(!a.length)return toast('这一组都已完全熟悉');startLoop(a)}
@@ -724,14 +738,13 @@ function renderList(){
     groups().forEach(function(g){var ix=g.ix.filter(function(i){return ok(W[i])});if(!ix.length)return;
       var fm=ix.filter(function(i){return W[i].fam}).length,hd=ix.filter(function(i){return W[i].hard&&!W[i].fam}).length,op=openG[g.k]||q;
       h+='<div class="card" style="padding:6px 16px"><div class="gh" onclick="tg(\''+g.k+'\')"><div class="t"><div class="w">'+esc(gname(g.k))+(cfg.gn[g.k]?' <span class="d" style="font-weight:400">'+glabel(g.k)+'</span>':'')+'</div><div class="d">'+ix.length+' 个词 · 熟悉 '+fm+(hd?' · 难词 '+hd:'')+'</div></div><span class="chev">'+(op?'▾':'▸')+'</span></div>';
-      if(op){h+='<div class="gact"><button class="gho" onclick="loopGroup(\''+g.k+'\')">循环复习</button><button class="gho" onclick="pullGroup(\''+g.k+'\')">整组拉回</button><button class="gho" onclick="resetGroup(\''+g.k+'\')">重新学</button><button class="gho" onclick="renameGroup(\''+g.k+'\')">改名</button></div>';ix.forEach(function(i){h+=rowHtml(i)})}
+      if(op){h+='<div class="gact"><button class="gho" onclick="pickGroup(\''+g.k+'\')">选词循环</button><button class="gho" onclick="pullGroup(\''+g.k+'\')">整组拉回</button><button class="gho" onclick="resetGroup(\''+g.k+'\')">重新学</button><button class="gho" onclick="renameGroup(\''+g.k+'\')">改名</button></div>';ix.forEach(function(i){h+=rowHtml(i)})}
       h+='</div>'})
   }else{
     var arr=[];W.forEach(function(w,i){if(ok(w)&&(lt==='hard'?(w.hard&&!w.fam):w.fam))arr.push(i)});
     if(lt==='hard'&&arr.length)h+='<button class="pri wide" style="margin-bottom:12px" onclick="loopHard()">练习难词</button>';
     h+=arr.length?'<div class="card">'+arr.map(function(i){return rowHtml(i)}).join('')+'</div>':'<div class="empty">'+(lt==='hard'?'还没有难词。错 3 次以上的词会自动进来，连续答对 3 次再移出。':'还没有完全熟悉的词。')+'</div>'}
   $('lst').innerHTML=h||'<div class="empty">没有找到单词。</div>'}
-function loopGroup(k){var a=wordsOf(k).filter(function(w){return !w.fam});if(!a.length)return toast('这一组都已完全熟悉');tab('today');startLoop(a)}
 function loopHard(){var a=W.filter(function(w){return w.hard&&!w.fam});if(!a.length)return;tab('today');startLoop(a)}
 function pullGroup(k){wordsOf(k).forEach(function(w){w.nextReview=0;w.fam=false});save();toast('整组已拉回，今天就能复习');renderList()}
 function resetGroup(k){if(!confirm('把这一组所有词的进度清零，重新开始学？'))return;wordsOf(k).forEach(function(w){w.level=0;w.nextReview=0;w.fam=false;w.hard=false;w.rev=0;w.wrong=0;w.streak=0;w.last='';delete w.seen});save();toast('已重新开始');renderList()}
